@@ -35,11 +35,15 @@
 
     /* ゲームカード一覧 */
     .game-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
       gap: 20px;
       width: 100%;
       max-width: 920px;
+    }
+    .game-card {
+      width: 300px;
     }
 
     /* 個別ゲームカード */
