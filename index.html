@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>絶対〇〇感 シリーズ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Sans', sans-serif;
+      background: #0d1117;
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60px 20px 80px;
+    }
+
+    /* シリーズタイトル */
+    .series-header { text-align: center; margin-bottom: 56px; }
+    .series-eyebrow {
+      font-size: 0.8rem; letter-spacing: 4px; color: #445;
+      margin-bottom: 12px; text-transform: uppercase;
+    }
+    .series-title {
+      font-size: 3rem; font-weight: bold; letter-spacing: 6px;
+      color: #e94560; line-height: 1.1;
+    }
+    .series-title span { color: #eee; }
+    .series-desc {
+      margin-top: 16px; font-size: 0.95rem; color: #8b949e; line-height: 1.8;
+    }
+
+    /* ゲームカード一覧 */
+    .game-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+      width: 100%;
+      max-width: 920px;
+    }
+
+    /* 個別ゲームカード */
+    .game-card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 16px;
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: border-color 0.2s, transform 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .game-card:hover:not(.coming-soon) {
+      border-color: #e94560;
+      transform: translateY(-3px);
+    }
+    /* カードの左上のアクセントライン */
+    .game-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--accent, #e94560);
+    }
+    .game-card.coming-soon { opacity: 0.45; cursor: default; }
+    .game-card.coming-soon::before { background: #30363d; }
+
+    .card-icon   { font-size: 2.4rem; line-height: 1; }
+    .card-series { font-size: 0.7rem; color: #445; letter-spacing: 2px; }
+    .card-title  { font-size: 1.5rem; font-weight: bold; color: #eee; letter-spacing: 2px; }
+    .card-desc   { font-size: 0.85rem; color: #8b949e; line-height: 1.6; flex: 1; }
+
+    /* プレイボタン */
+    .play-btn {
+      display: inline-block; margin-top: 8px;
+      padding: 11px 28px;
+      background: #e94560; color: white;
+      border: none; border-radius: 8px;
+      font-size: 0.95rem; font-weight: bold;
+      text-decoration: none; text-align: center;
+      cursor: pointer; transition: background 0.2s;
+      letter-spacing: 1px;
+    }
+    .play-btn:hover { background: #c73652; }
+
+    /* Coming Soon バッジ */
+    .coming-badge {
+      display: inline-block; padding: 10px 20px;
+      background: #21262d; color: #445;
+      border-radius: 8px; font-size: 0.85rem;
+      text-align: center; letter-spacing: 1px;
+    }
+
+    /* フッター */
+    footer {
+      margin-top: 64px;
+      font-size: 0.78rem;
+      color: #333;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="series-header">
+    <p class="series-eyebrow">Game Series</p>
+    <h1 class="series-title">絶対<span>〇〇</span>感</h1>
+    <p class="series-desc">
+      「感覚」だけを頼りに挑む、知覚トレーニングゲームシリーズ。<br>
+      あなたの感覚は、どこまで正確か？
+    </p>
+  </header>
+
+  <div class="game-grid">
+
+    <!-- 絶対距離感（公開済み） -->
+    <div class="game-card" style="--accent: #e94560;">
+      <div class="card-icon">🗾</div>
+      <div class="card-series">絶対〇〇感 #1</div>
+      <div class="card-title">絶対距離感</div>
+      <p class="card-desc">
+        日本地図上の2地点間の直線距離を当てるゲーム。
+        制限時間内に答えるほど有利。HPが尽きるまで何問生き延びられるか？
+      </p>
+      <a class="play-btn" href="./kyori/">▶ プレイする</a>
+    </div>
+
+    <!-- 以下、将来追加予定 -->
+    <div class="game-card coming-soon" style="--accent: #4fc3f7;">
+      <div class="card-icon">⏱</div>
+      <div class="card-series">絶対〇〇感 #2</div>
+      <div class="card-title">絶対時間感</div>
+      <p class="card-desc">
+        「用意……スタート」の合図から、指定された秒数が経ったと思ったらストップ。
+        あなたの体内時計はどれほど正確か？
+      </p>
+      <div class="coming-badge">COMING SOON</div>
+    </div>
+
+    <div class="game-card coming-soon" style="--accent: #2ecc71;">
+      <div class="card-icon">🧭</div>
+      <div class="card-series">絶対〇〇感 #3</div>
+      <div class="card-title">絶対方向感</div>
+      <p class="card-desc">
+        ある都市の写真を見て、北がどの方角かを指で示す。
+        方向感覚と地理知識が試される一問入魂のゲーム。
+      </p>
+      <div class="coming-badge">COMING SOON</div>
+    </div>
+
+  </div>
+
+  <footer>© 絶対〇〇感 シリーズ</footer>
+
+</body>
+</html>
