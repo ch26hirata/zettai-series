@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>絶対距離感</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Sans', sans-serif;
+      background: #0d1117;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ===== ヘッダー ===== */
+    #header { background: #161b22; border-bottom: 1px solid #21262d; flex-shrink: 0; }
+    .header-row1 {
+      display: flex; align-items: center; justify-content: space-between; padding: 8px 16px;
+    }
+    #header h1        { font-size: 1.2rem; color: #e94560; letter-spacing: 2px; }
+    #question-count   { font-size: 0.85rem; color: #8b949e; }
+    #stage-badge      {
+      font-size: 0.75rem; padding: 2px 10px; border-radius: 10px;
+      background: #21262d; color: #f0a500; font-weight: bold; letter-spacing: 1px;
+      transition: background 0.4s, color 0.4s;
+    }
+
+    /* HPバー */
+    .header-row2 { display: flex; align-items: center; gap: 10px; padding: 4px 16px 8px; }
+    #hp-label    { font-size: 0.72rem; color: #8b949e; white-space: nowrap; }
+    #hp-bar-track {
+      flex: 1; height: 16px; background: #21262d; border-radius: 3px; overflow: hidden;
+    }
+    #hp-bar {
+      height: 100%; width: 100%; border-radius: 3px; background: #2ecc71;
+      transition: width 0.3s ease, background-color 0.4s;
+    }
+    @keyframes damageFlash { 0% { filter: brightness(4); } 100% { filter: brightness(1); } }
+    @keyframes healFlash   { 0% { filter: brightness(3) saturate(2); } 100% { filter: brightness(1); } }
+    #hp-bar.flash-damage { animation: damageFlash 0.4s ease-out; }
+    #hp-bar.flash-heal   { animation: healFlash   0.4s ease-out; }
+    #hp-value {
+      font-size: 0.85rem; font-weight: bold; color: #eee;
+      white-space: nowrap; min-width: 44px; text-align: right; font-variant-numeric: tabular-nums;
+    }
+
+    /* ===== ゲームエリア ===== */
+    #game-area { flex: 1; position: relative; overflow: hidden; }
+
+    /* ----- 出題フェーズ ----- */
+    #question-screen {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: #0d1117; padding: 20px 16px; gap: 20px;
+      transition: opacity 0.4s, transform 0.4s; z-index: 10;
+    }
+    #question-screen.exit { opacity: 0; transform: translateY(-40px); pointer-events: none; }
+
+    .location-card {
+      background: #161b22; border: 1px solid #30363d; border-radius: 16px;
+      padding: 24px 40px; text-align: center; width: 100%; max-width: 580px;
+    }
+    .loc-group { padding: 4px 0; }
+    .loc-label { font-size: 0.72rem; color: #8b949e; margin-bottom: 4px; letter-spacing: 1px; }
+    .loc-name  { font-size: 1.9rem; font-weight: bold; letter-spacing: 1px; line-height: 1.2; }
+    .loc-a .loc-name { color: #ff6b81; }
+    .loc-b .loc-name { color: #4fc3f7; }
+    .loc-divider     { font-size: 1.8rem; color: #30363d; margin: 6px 0; }
+
+    /* スライダー */
+    .slider-section    { width: 100%; max-width: 580px; }
+    .slider-value-display { text-align: center; margin-bottom: 14px; }
+    #slider-km {
+      font-size: 3.5rem; font-weight: bold; color: #fff; font-variant-numeric: tabular-nums;
+    }
+    .km-unit { font-size: 1.3rem; color: #8b949e; margin-left: 4px; }
+    #distance-slider {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 10px; border-radius: 5px; outline: none; cursor: pointer;
+    }
+    #distance-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 34px; height: 34px; background: #e94560; border-radius: 50%;
+      border: 3px solid #fff; cursor: pointer;
+      box-shadow: 0 2px 12px rgba(233,69,96,0.55); transition: box-shadow 0.15s;
+    }
+    #distance-slider::-webkit-slider-thumb:hover { box-shadow: 0 2px 20px rgba(233,69,96,0.8); }
+    #distance-slider::-moz-range-thumb {
+      width: 34px; height: 34px; background: #e94560;
+      border-radius: 50%; border: 3px solid #fff; cursor: pointer;
+    }
+    .slider-labels { display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.7rem; color: #555; }
+
+    /* 回答ボタン */
+    #submit-btn {
+      width: 100%; max-width: 580px; padding: 15px; background: #e94560; color: white;
+      border: none; border-radius: 10px; font-size: 1.1rem; font-weight: bold;
+      cursor: pointer; letter-spacing: 1px; transition: background 0.2s, transform 0.1s;
+    }
+    #submit-btn:hover    { background: #c73652; }
+    #submit-btn:active   { transform: scale(0.98); }
+    #submit-btn:disabled { background: #333; cursor: not-allowed; transform: none; }
+
+    /* タイマー & ストリーク */
+    .status-bar { display: flex; gap: 20px; align-items: center; justify-content: center; }
+    #timer-display {
+      font-size: 1.6rem; font-weight: bold; color: #8b949e;
+      font-variant-numeric: tabular-nums; transition: color 0.3s; min-width: 70px; text-align: center;
+    }
+    #timer-display.warn   { color: #f0a500; }
+    @keyframes timerPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    #timer-display.danger { color: #e94560; animation: timerPulse 0.5s ease-in-out infinite; }
+    #streak-display { font-size: 0.95rem; font-weight: bold; color: #f0a500; }
+
+    /* ----- 答え合わせフェーズ ----- */
+    #answer-screen {
+      position: absolute; inset: 0; opacity: 0; pointer-events: none;
+      transition: opacity 0.5s; z-index: 5;
+    }
+    #answer-screen.active { opacity: 1; pointer-events: all; }
+    #map { width: 100%; height: 100%; position: relative; z-index: 0; }
+
+    /* 結果パネル（地図下部オーバーレイ） */
+    #result-panel {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 1000;
+      background: rgba(13,17,23,0.93); backdrop-filter: blur(10px);
+      border-top: 1px solid #30363d; padding: 16px 28px;
+      display: flex; align-items: center; gap: 24px;
+    }
+    .result-details   { flex: 1; }
+    .result-numbers   { font-size: 0.9rem; color: #8b949e; margin-bottom: 4px; }
+    .result-numbers strong { color: #eee; font-size: 1.05rem; }
+    #result-hp-change { font-size: 1.6rem; font-weight: bold; margin: 4px 0; }
+    #result-hp-change.damage { color: #e94560; }
+    #result-hp-change.heal   { color: #2ecc71; }
+    #result-message { font-size: 0.82rem; color: #8b949e; }
+    #next-btn {
+      padding: 13px 30px; background: #1f6feb; color: white;
+      border: none; border-radius: 8px; font-size: 1rem; font-weight: bold;
+      cursor: pointer; white-space: nowrap; transition: background 0.2s; flex-shrink: 0;
+    }
+    #next-btn:hover { background: #388bfd; }
+
+    /* ===== 演出オーバーレイ群 ===== */
+
+    /* 低HPビネット：画面の縁が赤く光る */
+    #vignette {
+      position: fixed; inset: 0; pointer-events: none; z-index: 200;
+      transition: box-shadow 0.5s;
+    }
+    @keyframes vignettePulse {
+      0%, 100% { box-shadow: inset 0 0 60px 15px rgba(233,69,96,0.55); }
+      50%       { box-shadow: inset 0 0 90px 25px rgba(233,69,96,0.85); }
+    }
+    #vignette.pulse { animation: vignettePulse 0.9s ease-in-out infinite; }
+
+    /* 精度バッジ：PERFECT!! / GREAT! / GOOD */
+    #accuracy-popup {
+      position: fixed; top: 50%; left: 50%; z-index: 9000;
+      transform: translate(-50%, -50%);
+      text-align: center; pointer-events: none; display: none;
+    }
+    #accuracy-popup.show { display: block; }
+    #popup-rank {
+      font-size: 4rem; font-weight: bold; letter-spacing: 4px; line-height: 1;
+    }
+    /* 各ランクの色・グロー */
+    #popup-rank.perfect {
+      color: #ffd700;
+      animation: perfectAnim 1.5s ease forwards;
+    }
+    @keyframes perfectAnim {
+      0%   { opacity: 0; transform: scale(0.5); text-shadow: 0 0 0 transparent; }
+      15%  { opacity: 1; transform: scale(1.15); text-shadow: 0 0 20px #fff, 0 0 50px #ffd700, 0 0 100px #ffd700; }
+      70%  { opacity: 1; transform: scale(1);    text-shadow: 0 0 10px #fff, 0 0 30px #ffd700; }
+      100% { opacity: 0; transform: scale(0.95); text-shadow: none; }
+    }
+    #popup-rank.great {
+      color: #4fc3f7;
+      animation: rankAnim 1.2s ease forwards;
+    }
+    #popup-rank.good {
+      color: #2ecc71;
+      animation: rankAnim 1.0s ease forwards;
+    }
+    @keyframes rankAnim {
+      0%   { opacity: 0; transform: scale(0.6); }
+      15%  { opacity: 1; transform: scale(1.08); }
+      70%  { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(0.95); }
+    }
+    /* サブテキスト：ストリーク / サバイバル */
+    #popup-streak {
+      font-size: 1.4rem; font-weight: bold; color: #f0a500;
+      margin-top: 8px; letter-spacing: 2px;
+      animation: rankAnim 1.2s ease forwards;
+    }
+    #popup-survival {
+      font-size: 1.1rem; color: #ff6b81; margin-top: 6px; letter-spacing: 2px;
+      animation: rankAnim 1.2s ease forwards;
+    }
+
+    /* GODLIKE時の金フラッシュ：画面全体を一瞬金色に */
+    #gold-flash {
+      position: fixed; inset: 0; z-index: 8000; pointer-events: none;
+      background: rgba(255,215,0,0.18); opacity: 0; transition: opacity 0.15s;
+    }
+    #gold-flash.show { opacity: 1; }
+
+    /* ステージアップ通知 */
+    #stage-notif {
+      position: fixed; top: 50%; left: 50%; z-index: 5000;
+      transform: translate(-50%, -50%); pointer-events: none;
+      background: rgba(10,10,20,0.96); border: 2px solid #f0a500;
+      border-radius: 16px; padding: 28px 48px; text-align: center; display: none;
+    }
+    @keyframes stagePopup {
+      0%   { opacity: 0; transform: translate(-50%,-50%) scale(0.7); }
+      20%  { opacity: 1; transform: translate(-50%,-50%) scale(1.06); }
+      80%  { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%,-50%) scale(1); }
+    }
+    #stage-notif.show { display: block; animation: stagePopup 2s ease forwards; }
+    #notif-title { font-size: 2rem; font-weight: bold; color: #f0a500; letter-spacing: 4px; }
+    #notif-sub   { font-size: 1rem; color: #eee; margin-top: 6px; }
+
+    /* ===== スタート画面 ===== */
+    #start-screen {
+      position: fixed; inset: 0; background: #0d1117; z-index: 9999;
+      display: flex; justify-content: center; align-items: center;
+    }
+    #start-box { text-align: center; max-width: 460px; padding: 24px; width: 100%; }
+    .series-label { font-size: 0.75rem; color: #445; margin-bottom: 4px; letter-spacing: 2px; }
+    #start-box h1 { font-size: 2.8rem; color: #e94560; margin-bottom: 10px; letter-spacing: 4px; }
+    #start-box p  { color: #8b949e; line-height: 1.7; font-size: 0.9rem; margin-bottom: 8px; }
+    #start-box p strong { color: #c9d1d9; }
+
+    .rules-box {
+      background: #161b22; border: 1px solid #21262d; border-radius: 10px;
+      padding: 14px 16px; margin: 16px 0; text-align: left;
+    }
+    .rule { font-size: 0.82rem; color: #8b949e; padding: 3px 0; line-height: 1.5; }
+    .rule strong { color: #c9d1d9; }
+
+    /* ベストスコア表示（スタート画面） */
+    #best-on-start {
+      font-size: 0.85rem; color: #f0a500; margin: 8px 0 16px; min-height: 20px;
+    }
+
+    /* 難易度選択 */
+    .difficulty-area { margin: 16px 0; }
+    .difficulty-area label {
+      display: block; font-size: 0.75rem; color: #8b949e; margin-bottom: 8px;
+    }
+    .difficulty-area select {
+      padding: 9px 14px; background: #161b22; color: #eee;
+      border: 1px solid #30363d; border-radius: 8px; font-size: 0.95rem; cursor: pointer;
+    }
+
+    #start-btn {
+      padding: 14px 60px; background: #e94560; color: white;
+      border: none; border-radius: 10px; font-size: 1.2rem;
+      font-weight: bold; cursor: pointer; letter-spacing: 2px;
+    }
+    #start-btn:hover { background: #c73652; }
+
+    /* ===== ゲームオーバー ===== */
+    #game-over {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.92); z-index: 9999;
+      justify-content: center; align-items: center;
+    }
+    #game-over.visible { display: flex; }
+    #game-over-box {
+      background: #161b22; border: 1px solid #30363d;
+      border-radius: 16px; padding: 36px;
+      text-align: center; max-width: 420px; width: 90%;
+    }
+    #game-over-box h2  { font-size: 2rem; color: #e94560; margin-bottom: 4px; }
+    .go-sub            { font-size: 0.85rem; color: #8b949e; margin-bottom: 20px; }
+    #final-questions   { font-size: 4.5rem; font-weight: bold; color: #f0a500; line-height: 1; margin-bottom: 4px; }
+    #final-unit        { font-size: 1rem; color: #8b949e; margin-bottom: 8px; }
+    /* NEW RECORD バナー */
+    #new-record-banner {
+      display: none; font-size: 1.2rem; font-weight: bold; color: #ffd700;
+      margin-bottom: 12px; letter-spacing: 2px;
+    }
+    @keyframes recordBlink {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+    }
+    #new-record-banner.show {
+      display: block; animation: recordBlink 0.6s ease-in-out 4;
+    }
+    #best-score-line { font-size: 0.82rem; color: #8b949e; margin-bottom: 12px; }
+    #best-score-line span { color: #f0a500; }
+    #final-stats {
+      background: #0d1117; border-radius: 8px; padding: 12px;
+      margin: 8px 0 12px; font-size: 0.85rem; color: #8b949e; text-align: left;
+    }
+    .stat-row { display: flex; justify-content: space-between; padding: 3px 0; }
+    .stat-val  { color: #c9d1d9; font-weight: bold; }
+    #final-message { font-size: 1rem; color: #eee; margin: 8px 0 20px; }
+    #restart-btn {
+      padding: 13px 40px; background: #e94560; color: white;
+      border: none; border-radius: 8px; font-size: 1.1rem;
+      cursor: pointer; font-weight: bold;
+    }
+    #restart-btn:hover { background: #c73652; }
+  </style>
+</head>
+<body>
+
+<!-- 低HPビネット（常時存在、HP量で表示変化） -->
+<div id="vignette"></div>
+
+<!-- 精度バッジポップアップ（PERFECT!! / GREAT! / GOOD） -->
+<div id="accuracy-popup">
+  <div id="popup-rank"></div>
+  <div id="popup-streak"></div>
+  <div id="popup-survival"></div>
+</div>
+
+<!-- GODLIKE時の金フラッシュ -->
+<div id="gold-flash"></div>
+
+<!-- ステージアップ通知 -->
+<div id="stage-notif">
+  <div id="notif-title">STAGE 2</div>
+  <div id="notif-sub">ダメージ倍率 ×1.3</div>
+</div>
+
+<!-- スタート画面 -->
+<div id="start-screen">
+  <div id="start-box">
+    <p class="series-label">絶対〇〇感 シリーズ</p>
+    <h1>絶対距離感</h1>
+    <p>2地点の直線距離（km）を当てるゲーム<br>
+       HP 0になるまで<strong>何問生き延びられるか！</strong></p>
+    <div id="best-on-start"></div>
+
+    <div class="rules-box">
+      <div class="rule">⚡ <strong>早く答えるほど</strong>ダメージが少ない（5秒で等倍）</div>
+      <div class="rule">🩸 <strong>5秒超えると</strong>HPがじわじわ削れ続ける</div>
+      <div class="rule">🎯 <strong>誤差±15%以内</strong>で正解 → HP回復</div>
+      <div class="rule">🔥 <strong>連続正解</strong>で回復量が最大×3.0に！</div>
+      <div class="rule">💀 <strong>連続ミス</strong>はダメージが積み重なっていく</div>
+    </div>
+
+    <div class="difficulty-area">
+      <label>難易度（初期HP）</label>
+      <select id="hp-select">
+        <option value="150">かんたん (150)</option>
+        <option value="100" selected>ふつう (100)</option>
+        <option value="60">むずかしい (60)</option>
+      </select>
+    </div>
+
+    <button id="start-btn" onclick="startGame()">スタート</button>
+  </div>
+</div>
+
+<!-- ヘッダー -->
+<div id="header">
+  <div class="header-row1">
+    <h1>絶対距離感</h1>
+    <div id="question-count">第 1 問</div>
+    <span id="stage-badge">STAGE 1　×1.0</span>
+  </div>
+  <div class="header-row2">
+    <span id="hp-label">❤ HP</span>
+    <div id="hp-bar-track"><div id="hp-bar"></div></div>
+    <span id="hp-value">100</span>
+  </div>
+</div>
+
+<!-- ゲームエリア -->
+<div id="game-area">
+
+  <!-- 出題フェーズ -->
+  <div id="question-screen">
+    <div class="location-card">
+      <div class="loc-group loc-a">
+        <div class="loc-label">📍 地点 A</div>
+        <div class="loc-name" id="name-a">-</div>
+      </div>
+      <div class="loc-divider">↕</div>
+      <div class="loc-group loc-b">
+        <div class="loc-label">📍 地点 B</div>
+        <div class="loc-name" id="name-b">-</div>
+      </div>
+    </div>
+
+    <div class="slider-section">
+      <div class="slider-value-display">
+        <span id="slider-km">500</span><span class="km-unit">km</span>
+      </div>
+      <input type="range" id="distance-slider"
+        min="0" max="2500" step="1" value="500" oninput="onSliderInput(this)">
+      <div class="slider-labels">
+        <span>0</span><span>500</span><span>1,000</span>
+        <span>1,500</span><span>2,000</span><span>2,500 km</span>
+      </div>
+    </div>
+
+    <button id="submit-btn" onclick="submitGuess()">回答する</button>
+
+    <div class="status-bar">
+      <div id="timer-display">0.0s</div>
+      <div id="streak-display"></div>
+    </div>
+  </div>
+
+  <!-- 答え合わせフェーズ -->
+  <div id="answer-screen">
+    <div id="map"></div>
+    <div id="result-panel">
+      <div class="result-details">
+        <div class="result-numbers">
+          あなた: <strong><span id="your-answer">-</span> km</strong>
+          &nbsp;→&nbsp;
+          正解: <strong><span id="actual-distance">-</span> km</strong>
+          &nbsp;<span id="error-pct"></span>
+        </div>
+        <div id="result-hp-change">-</div>
+        <div id="result-message"></div>
+      </div>
+      <button id="next-btn" onclick="nextRound()">次の問題 →</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ゲームオーバー -->
+<div id="game-over">
+  <div id="game-over-box">
+    <h2>GAME OVER</h2>
+    <p class="go-sub">HPがゼロになりました</p>
+    <div id="new-record-banner">🎉 NEW RECORD!!</div>
+    <div id="final-questions">0</div>
+    <div id="final-unit">問生き延びた</div>
+    <div id="best-score-line">最高記録: <span id="best-score-val">-</span></div>
+    <div id="final-stats">
+      <div class="stat-row"><span>最大連続正解</span><span class="stat-val" id="stat-streak">-</span></div>
+      <div class="stat-row"><span>合計回復量</span>  <span class="stat-val" id="stat-healed">-</span></div>
+      <div class="stat-row"><span>平均回答時間</span><span class="stat-val" id="stat-avg-time">-</span></div>
+    </div>
+    <div id="final-message"></div>
+    <button id="restart-btn" onclick="showStartScreen()">もう一度プレイ</button>
+  </div>
+</div>
+
+<script>
+// =====================================================
+// 地点データ
+// =====================================================
+const LOCATIONS = [
+  { name: "東京都庁",         lat: 35.6896, lng: 139.6921 },
+  { name: "大阪城",           lat: 34.6873, lng: 135.5259 },
+  { name: "札幌時計台",       lat: 43.0642, lng: 141.3469 },
+  { name: "名古屋城",         lat: 35.1855, lng: 136.8993 },
+  { name: "福岡タワー",       lat: 33.5953, lng: 130.3542 },
+  { name: "仙台城跡",         lat: 38.2523, lng: 140.8634 },
+  { name: "広島平和記念公園", lat: 34.3955, lng: 132.4534 },
+  { name: "京都金閣寺",       lat: 35.0394, lng: 135.7292 },
+  { name: "神戸ポートタワー", lat: 34.6829, lng: 135.1998 },
+  { name: "長崎平和公園",     lat: 32.7736, lng: 129.8677 },
+  { name: "那覇首里城",       lat: 26.2172, lng: 127.7197 },
+  { name: "函館山展望台",     lat: 41.7576, lng: 140.6983 },
+  { name: "金沢兼六園",       lat: 36.5613, lng: 136.6622 },
+  { name: "松山城",           lat: 33.8490, lng: 132.7660 },
+  { name: "熊本城",           lat: 32.8058, lng: 130.7060 },
+  { name: "奈良東大寺",       lat: 34.6888, lng: 135.8398 },
+  { name: "横浜みなとみらい", lat: 35.4579, lng: 139.6367 },
+  { name: "富士山頂",         lat: 35.3606, lng: 138.7274 },
+  { name: "鹿児島桜島",       lat: 31.5817, lng: 130.6573 },
+  { name: "青森ねぶた会館",   lat: 40.8240, lng: 140.7395 },
+  { name: "高松栗林公園",     lat: 34.3365, lng: 134.0478 },
+  { name: "新潟万代橋",       lat: 37.9147, lng: 139.0620 },
+  { name: "岡山後楽園",       lat: 34.6627, lng: 133.9359 },
+  { name: "宇都宮二荒山神社", lat: 36.5551, lng: 139.8830 },
+  { name: "盛岡城跡",         lat: 39.7034, lng: 141.1527 },
+  { name: "高知城",           lat: 33.5597, lng: 133.5311 },
+  { name: "旭川旭山動物園",   lat: 43.7697, lng: 142.4807 },
+  { name: "秋田竿燈会場",     lat: 39.7192, lng: 140.1036 },
+  { name: "長野善光寺",       lat: 36.6613, lng: 138.1879 },
+  { name: "静岡久能山東照宮", lat: 34.9636, lng: 138.4367 },
+];
+
+// =====================================================
+// ゲーム状態
+// =====================================================
+let map;
+let markers = [], lineLayer = null;
+let currentHP = 100, maxHP = 100;
+let answered  = false;
+let locA, locB, actualDist;
+
+let questionsAnswered = 0;
+let streak      = 0;
+let wrongStreak = 0;
+let maxStreak   = 0;
+let totalHealed = 0;
+let totalTime   = 0;
+
+let questionStartTime = null;
+let timerRAF          = null;
+let passiveDrainTimer = null;
+
+// =====================================================
+// ハイスコア（localStorage）
+// =====================================================
+function loadBest() { return parseInt(localStorage.getItem("zktai-best") || "0"); }
+function saveBest(n) { localStorage.setItem("zktai-best", n); }
+
+function refreshBestOnStart() {
+  const best = loadBest();
+  document.getElementById("best-on-start").textContent =
+    best > 0 ? `🏆 最高記録: ${best} 問` : "";
+}
+
+// =====================================================
+// スタート画面に戻る
+// =====================================================
+function showStartScreen() {
+  stopQuestionTimer();
+  refreshBestOnStart();
+  document.getElementById("start-screen").style.display = "flex";
+  document.getElementById("game-over").classList.remove("visible");
+  document.getElementById("answer-screen").classList.remove("active");
+  document.getElementById("question-screen").classList.remove("exit");
+  updateVignette(); // ビネットをリセット
+}
+
+// =====================================================
+// スライダー
+// =====================================================
+function onSliderInput(slider) {
+  document.getElementById("slider-km").textContent = parseInt(slider.value).toLocaleString();
+  const pct = (slider.value / slider.max) * 100;
+  slider.style.background = `linear-gradient(to right, #e94560 ${pct}%, #21262d ${pct}%)`;
+}
+function initSlider() {
+  const s = document.getElementById("distance-slider");
+  s.value = 500;
+  onSliderInput(s);
+}
+
+// =====================================================
+// ゲーム開始
+// =====================================================
+function startGame() {
+  maxHP           = parseInt(document.getElementById("hp-select").value);
+  currentHP       = maxHP;
+  questionsAnswered = 0;
+  streak = wrongStreak = maxStreak = 0;
+  totalHealed = totalTime = 0;
+
+  document.getElementById("start-screen").style.display = "none";
+  document.getElementById("game-over").classList.remove("visible");
+  updateHPBar(false);
+  updateVignette();
+
+  if (!map) {
+    map = L.map("map").setView([36.5, 137.5], 5);
+    L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+      { attribution: "© OSM © CARTO", subdomains: "abcd", maxZoom: 19 }
+    ).addTo(map);
+  }
+  nextRound();
+}
+
+// =====================================================
+// 次の問題
+// =====================================================
+function nextRound() {
+  stopQuestionTimer();
+  answered = false;
+  questionsAnswered++;
+
+  switchToQuestionScreen();
+  document.getElementById("question-count").textContent = `第 ${questionsAnswered} 問`;
+  document.getElementById("submit-btn").disabled = false;
+  document.getElementById("timer-display").textContent = "0.0s";
+  document.getElementById("timer-display").className = "";
+  updateStreakDisplay();
+  initSlider();
+
+  // ステージ更新・ステージアップ通知
+  const currStage = getStage(questionsAnswered);
+  const prevStage = getStage(questionsAnswered - 1);
+  const mult = STAGE_MULTS[currStage];
+  document.getElementById("stage-badge").textContent = `STAGE ${currStage + 1}　×${mult.toFixed(1)}`;
+  if (questionsAnswered > 1 && currStage > prevStage) showStageNotif(currStage + 1, mult);
+
+  // 2地点をランダム選択
+  const shuffled = [...LOCATIONS].sort(() => Math.random() - 0.5);
+  locA = shuffled[0];
+  locB = shuffled[1];
+  actualDist = haversineDistance(locA.lat, locA.lng, locB.lat, locB.lng);
+  document.getElementById("name-a").textContent = locA.name;
+  document.getElementById("name-b").textContent = locB.name;
+
+  updateMap();
+  startQuestionTimer();
+}
+
+// =====================================================
+// 画面切替アニメーション
+// =====================================================
+function switchToQuestionScreen() {
+  document.getElementById("answer-screen").classList.remove("active");
+  document.getElementById("question-screen").classList.remove("exit");
+}
+function switchToAnswerScreen() {
+  document.getElementById("question-screen").classList.add("exit");
+  setTimeout(() => {
+    document.getElementById("answer-screen").classList.add("active");
+    if (map) map.invalidateSize();
+  }, 300);
+}
+
+// =====================================================
+// タイマー
+// =====================================================
+function startQuestionTimer() {
+  questionStartTime = performance.now();
+  function tick() {
+    if (answered || !questionStartTime) return;
+    const e = (performance.now() - questionStartTime) / 1000;
+    const el = document.getElementById("timer-display");
+    el.textContent = e.toFixed(1) + "s";
+    el.className = e >= 5 ? "danger" : e >= 3 ? "warn" : "";
+    timerRAF = requestAnimationFrame(tick);
+  }
+  timerRAF = requestAnimationFrame(tick);
+  // 5秒超：200msごとに0.3HPずつ削る（≒1.5HP/秒）
+  passiveDrainTimer = setInterval(() => {
+    if (answered || !questionStartTime) return;
+    if ((performance.now() - questionStartTime) / 1000 > 5) {
+      changeHP(-0.3, "drain");
+      if (currentHP <= 0) { clearInterval(passiveDrainTimer); triggerGameOver(); }
+    }
+  }, 200);
+}
+function stopQuestionTimer() {
+  if (timerRAF)          cancelAnimationFrame(timerRAF);
+  if (passiveDrainTimer) clearInterval(passiveDrainTimer);
+  timerRAF = null; passiveDrainTimer = null;
+}
+
+// =====================================================
+// HP管理
+// =====================================================
+function changeHP(delta, mode = false) {
+  currentHP = Math.max(0, Math.min(maxHP, currentHP + delta));
+  updateHPBar(mode);
+  updateVignette();
+}
+function updateHPBar(mode = false) {
+  const bar = document.getElementById("hp-bar");
+  const pct = (currentHP / maxHP) * 100;
+  bar.style.width = pct + "%";
+  document.getElementById("hp-value").textContent = Math.ceil(currentHP);
+  bar.style.background = pct > 60 ? "#2ecc71" : pct > 30 ? "#f0a500" : "#e94560";
+  if (mode === "damage") {
+    bar.classList.remove("flash-damage", "flash-heal"); void bar.offsetWidth;
+    bar.classList.add("flash-damage");
+  } else if (mode === "heal") {
+    bar.classList.remove("flash-damage", "flash-heal"); void bar.offsetWidth;
+    bar.classList.add("flash-heal");
+  }
+}
+
+// ビネット：HP量に応じて画面縁の赤さが変わる
+function updateVignette() {
+  const el = document.getElementById("vignette");
+  const hp = currentHP;
+  if (hp <= 0) {
+    // ゲームオーバー直前：強く光る
+    el.classList.remove("pulse");
+    el.style.boxShadow = "inset 0 0 100px 30px rgba(233,69,96,0.95)";
+  } else if (hp <= 10) {
+    // 瀕死：点滅
+    el.style.boxShadow = "";
+    el.classList.add("pulse");
+  } else if (hp <= 20) {
+    el.classList.remove("pulse");
+    el.style.boxShadow = "inset 0 0 50px 12px rgba(233,69,96,0.45)";
+  } else if (hp <= 35) {
+    el.classList.remove("pulse");
+    el.style.boxShadow = "inset 0 0 30px 6px rgba(233,69,96,0.2)";
+  } else {
+    el.classList.remove("pulse");
+    el.style.boxShadow = "none";
+  }
+}
+
+// =====================================================
+// ストリーク表示
+// =====================================================
+function updateStreakDisplay() {
+  const el = document.getElementById("streak-display");
+  if (streak >= 7)     el.textContent = `💎 ${streak}連続 GODLIKE!!!`;
+  else if (streak >= 5) el.textContent = `⚡ ${streak}連続 PENTA!!`;
+  else if (streak >= 3) el.textContent = `🔥 ${streak}連続 TRIPLE!`;
+  else if (streak >= 2) el.textContent = `🔥 ${streak}連続正解中！ 回復×${getStreakMult(streak).toFixed(1)}`;
+  else if (streak === 1) el.textContent = "✅ 正解中！";
+  else el.textContent = "";
+}
+
+// =====================================================
+// 精度バッジポップアップ
+// accuracyRank: "perfect" / "great" / "good"
+// streakLabel: 表示するストリークテキスト（ない場合は空）
+// isSurvival: HP10以下からの正解かどうか
+// =====================================================
+function showAccuracyPopup(accuracyRank, streakLabel, isSurvival) {
+  const popup  = document.getElementById("accuracy-popup");
+  const rankEl = document.getElementById("popup-rank");
+  const strEl  = document.getElementById("popup-streak");
+  const surEl  = document.getElementById("popup-survival");
+
+  const labels = { perfect: "PERFECT!!", great: "GREAT!", good: "GOOD" };
+  rankEl.textContent = labels[accuracyRank];
+  rankEl.className   = accuracyRank; // CSSクラスで色・アニメを切替
+  strEl.textContent  = streakLabel;
+  surEl.textContent  = isSurvival ? "💗 SURVIVAL BONUS" : "";
+
+  // アニメ再トリガー
+  popup.classList.remove("show");
+  void popup.offsetWidth;
+  popup.classList.add("show");
+
+  // GODLIKE時：画面全体を金色にフラッシュ
+  if (streakLabel.includes("GODLIKE")) {
+    const gf = document.getElementById("gold-flash");
+    gf.classList.add("show");
+    setTimeout(() => {
+      gf.style.transition = "opacity 0.6s";
+      gf.classList.remove("show");
+      setTimeout(() => { gf.style.transition = "opacity 0.15s"; }, 600);
+    }, 200);
+  }
+
+  // アニメ終了後にポップアップを非表示
+  const duration = accuracyRank === "perfect" ? 1500 : 1200;
+  setTimeout(() => popup.classList.remove("show"), duration);
+}
+
+// =====================================================
+// ステージ管理
+// =====================================================
+const STAGE_MULTS = [1.0, 1.3, 1.7, 2.2, 3.0];
+function getStage(q) { return Math.min(Math.floor((q - 1) / 5), STAGE_MULTS.length - 1); }
+function getStageMult(q) { return STAGE_MULTS[getStage(q)]; }
+
+function showStageNotif(stage, mult) {
+  const el = document.getElementById("stage-notif");
+  document.getElementById("notif-title").textContent = `STAGE ${stage}`;
+  document.getElementById("notif-sub").textContent   = `ダメージ倍率 ×${mult.toFixed(1)}`;
+  el.classList.remove("show"); void el.offsetWidth;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2000);
+}
+
+// =====================================================
+// 距離計算（ハーバーサイン公式）
+// =====================================================
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// =====================================================
+// ダメージ計算
+// =====================================================
+function getTimeMult(sec) {
+  return sec <= 5 ? 0.2 + (sec / 5) * 0.8 : 1.0 + (sec - 5) * 0.12;
+}
+// 連続ミス数に応じて最低ダメージが増加
+function getMinDamage(ws) {
+  if (ws <= 1) return 5; if (ws === 2) return 8; if (ws === 3) return 12; return 15;
+}
+function calcDamage(errorRatio, timeMult, ws) {
+  return Math.max(getMinDamage(ws), Math.round(Math.min(errorRatio, 1) * 30 * timeMult));
+}
+
+// =====================================================
+// 回復計算
+// =====================================================
+function getStreakMult(s) { return 1 + Math.min(s - 1, 4) * 0.5; }
+function calcRecovery(errorRatio, s, isSurvival) {
+  const base = errorRatio <= 0.10 ? 8 : 4;
+  const raw  = Math.min(30, Math.round(base * getStreakMult(s)));
+  // HP10以下からの正解はサバイバルボーナス：回復×1.5
+  return isSurvival ? Math.round(raw * 1.5) : raw;
+}
+
+// =====================================================
+// 回答処理
+// =====================================================
+function submitGuess() {
+  if (answered) return;
+
+  const slider   = document.getElementById("distance-slider");
+  const guess    = parseInt(slider.value);
+  const elapsed  = questionStartTime ? (performance.now() - questionStartTime) / 1000 : 5;
+  const wasLowHP = currentHP < 10; // 回答前に瀕死だったか
+
+  answered = true;
+  stopQuestionTimer();
+  document.getElementById("submit-btn").disabled = true;
+  totalTime += elapsed;
+
+  const errorRatio = Math.abs(guess - actualDist) / actualDist;
+  const timeMult   = getTimeMult(elapsed);
+  const stageMult  = getStageMult(questionsAnswered);
+  const isCorrect  = errorRatio <= 0.15;
+  const errorPct   = Math.round(errorRatio * 100);
+
+  let hpDelta, hpMode, resultMsg, accuracyRank, streakLabel;
+
+  if (isCorrect) {
+    streak++;
+    wrongStreak = 0;
+    if (streak > maxStreak) maxStreak = streak;
+
+    const recovery = calcRecovery(errorRatio, streak, wasLowHP);
+    totalHealed += recovery;
+    hpDelta  = +recovery;
+    hpMode   = "heal";
+
+    // 精度ランク
+    accuracyRank = errorRatio <= 0.05 ? "perfect" : errorRatio <= 0.10 ? "great" : "good";
+
+    // ストリークラベル（3以上で表示）
+    if      (streak >= 7) streakLabel = "💎 GODLIKE!!!";
+    else if (streak >= 5) streakLabel = "⚡ PENTA!!";
+    else if (streak >= 3) streakLabel = `🔥 ${streak}連続 TRIPLE!`;
+    else                  streakLabel = streak >= 2 ? `🔥 ${streak}連続！` : "";
+
+    resultMsg = wasLowHP
+      ? `💗 サバイバルボーナス！ 回復×1.5`
+      : streakLabel || "🎯 正解！";
+  } else {
+    streak = 0;
+    wrongStreak++;
+    const damage = calcDamage(errorRatio, timeMult * stageMult, wrongStreak);
+    hpDelta      = -damage;
+    hpMode       = "damage";
+    accuracyRank = null; // ミスはバッジなし
+    streakLabel  = "";
+    const speedNote = elapsed < 2 ? " (早押し)" : elapsed > 5 ? " (長考ペナルティ)" : "";
+    const missNote  = wrongStreak >= 3 ? `  ⚠ ${wrongStreak}連続ミス！` : "";
+    resultMsg = `${elapsed.toFixed(1)}秒 × ${timeMult.toFixed(1)}倍${speedNote}${missNote}`;
+  }
+
+  changeHP(hpDelta, hpMode);
+  updateStreakDisplay();
+
+  // 正解なら精度バッジを表示
+  if (accuracyRank) showAccuracyPopup(accuracyRank, streakLabel, wasLowHP);
+
+  // 正解ラインを地図に描画
+  lineLayer = L.polyline(
+    [[locA.lat, locA.lng], [locB.lat, locB.lng]],
+    { color: "#f0a500", weight: 2, dashArray: "8, 6", opacity: 0.85 }
+  ).addTo(map);
+
+  // 結果パネル更新
+  document.getElementById("your-answer").textContent      = guess.toLocaleString();
+  document.getElementById("actual-distance").textContent  = Math.round(actualDist).toLocaleString();
+  document.getElementById("error-pct").textContent        = `(誤差 ${errorPct}%)`;
+  const hpEl = document.getElementById("result-hp-change");
+  hpEl.textContent = hpDelta >= 0 ? `▲ +${hpDelta} HP` : `▼ ${hpDelta} HP`;
+  hpEl.className   = hpDelta >= 0 ? "heal" : "damage";
+  document.getElementById("result-message").textContent   = resultMsg;
+
+  // 答え合わせフェーズへ切替（精度バッジ表示中に地図をフェードイン）
+  switchToAnswerScreen();
+
+  if (currentHP <= 0) setTimeout(triggerGameOver, 1000);
+}
+
+// =====================================================
+// 地図更新
+// =====================================================
+function updateMap() {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  if (lineLayer) { map.removeLayer(lineLayer); lineLayer = null; }
+
+  const makeIcon = (label, color) => L.divIcon({
+    html: `<div style="background:${color};color:white;border-radius:50% 50% 50% 0;
+      transform:rotate(-45deg);width:28px;height:28px;display:flex;align-items:center;
+      justify-content:center;font-weight:bold;font-size:12px;border:2px solid white;
+      box-shadow:0 2px 6px rgba(0,0,0,0.5);">
+      <span style="transform:rotate(45deg)">${label}</span></div>`,
+    className: "", iconAnchor: [14, 28],
+  });
+  markers.push(
+    L.marker([locA.lat, locA.lng], { icon: makeIcon("A", "#e94560") })
+      .bindTooltip(locA.name, { permanent: true, direction: "top", offset: [0, -30] })
+      .addTo(map),
+    L.marker([locB.lat, locB.lng], { icon: makeIcon("B", "#4fc3f7") })
+      .bindTooltip(locB.name, { permanent: true, direction: "top", offset: [0, -30] })
+      .addTo(map)
+  );
+  map.fitBounds(
+    L.latLngBounds([locA.lat, locA.lng], [locB.lat, locB.lng]),
+    { padding: [60, 80] }
+  );
+}
+
+// =====================================================
+// ゲームオーバー
+// =====================================================
+function triggerGameOver() {
+  stopQuestionTimer();
+
+  const q       = questionsAnswered;
+  const best    = loadBest();
+  const isNew   = q > best;
+  if (isNew) saveBest(q);
+
+  const avgTime = q > 0 ? (totalTime / q).toFixed(1) + "s" : "-";
+  document.getElementById("final-questions").textContent  = q;
+  document.getElementById("stat-streak").textContent      = maxStreak + "回";
+  document.getElementById("stat-healed").textContent      = totalHealed + " HP";
+  document.getElementById("stat-avg-time").textContent    = avgTime;
+  document.getElementById("best-score-val").textContent   = (isNew ? q : best) + "問";
+
+  // NEW RECORD バナー
+  const banner = document.getElementById("new-record-banner");
+  banner.classList.remove("show");
+  if (isNew) { void banner.offsetWidth; banner.classList.add("show"); }
+
+  const msgs = [
+    [20, "🏆 伝説的な距離感マスター！"],
+    [12, "🎉 素晴らしい！真の距離感の持ち主！"],
+    [7,  "👍 なかなかいい距離感です！"],
+    [4,  "😊 もう少し！粘ってみよう"],
+    [0,  "💪 距離感を鍛えて再挑戦！"],
+  ];
+  document.getElementById("final-message").textContent = msgs.find(([n]) => q >= n)[1];
+  document.getElementById("game-over").classList.add("visible");
+}
+
+// 初回ロード時にベストスコアを表示
+refreshBestOnStart();
+</script>
+</body>
+</html>
